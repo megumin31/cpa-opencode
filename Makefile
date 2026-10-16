@@ -22,6 +22,7 @@ test-host:
 
 fixtures:
 	$(PYTHON) -m unittest discover -s tools/officialwire -p 'test_*.py' -v
+	$(PYTHON) -m unittest discover -s scripts -p 'test_*.py' -v
 
 preflight:
 	@for script in scripts/*.sh cmd/hostcheck/servicecheck/run.sh; do bash -n "$$script" || exit; done

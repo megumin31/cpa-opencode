@@ -37,6 +37,13 @@ The plugin discovers and routes all free-tier models provided by OpenCode. Call 
 
 ### 1. Download Pre-built Binary
 
+Published [Releases](https://github.com/megumin31/cpa-opencode-zen/releases) build
+both architectures and attach `opencode-<tag>-linux-amd64.tar.gz` and
+`opencode-<tag>-linux-arm64.tar.gz`, checksums and a completion manifest after
+both native gates pass. Choose your architecture, verify the checksums, and
+extract the archive without renaming its `.so`. See [release instructions and
+failure/retry behavior](docs/RELEASE.md).
+
 Every commit automatically produces Linux binaries via GitHub Actions for both `x86_64` (`amd64`) and `arm64` (`aarch64`):
 1. Go to the [Actions](https://github.com/megumin31/cpa-opencode-zen/actions) tab.
 2. Select the latest successful run of **Build Linux plugins**.

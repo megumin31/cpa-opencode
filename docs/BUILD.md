@@ -144,6 +144,8 @@ the job fail while retaining the separate diagnostic log.
 ## CI artifact provenance
 
 `.github/workflows/build-plugin.yml` keeps Linux amd64 and arm64 native jobs.
+Publishing a Release reuses this same matrix and attaches architecture-specific
+archives only after both jobs succeed; see [release automation](RELEASE.md).
 `scripts/ci-build.sh` prepares and verifies both dependency caches, runs the
 complete offline gate, and verifies:
 

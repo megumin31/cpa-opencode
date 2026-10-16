@@ -2,6 +2,8 @@ name: Build Linux plugins
 
 'on':
   push:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       check_known_host_bug:
@@ -13,8 +15,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
 
 jobs:
   build:
@@ -44,6 +46,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Set up Go
@@ -64,6 +67,7 @@ jobs:
           name: opencode-linux-${{ matrix.arch }}-${{ github.sha }}
           path: build/ci-artifact/
           if-no-files-found: error
+          overwrite: true
           retention-days: 14
 
       - name: Reproduce known host disable failure (opt-in, strict)
@@ -79,4 +83,53 @@ jobs:
           name: build-logs-linux-${{ matrix.arch }}-${{ github.sha }}
           path: build/ci-logs/
           if-no-files-found: warn
+          overwrite: true
           retention-days: 14
+
+  publish:
+    name: Attach verified release assets
+    if: ${{ github.event_name == 'release' && github.event.action == 'published' }}
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the triggering commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Download verified amd64 build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: opencode-linux-amd64-${{ github.sha }}
+          path: build/release-input/amd64
+
+      - name: Download verified arm64 build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: opencode-linux-arm64-${{ github.sha }}
+          path: build/release-input/arm64
+
+      - name: Verify both builds and prepare architecture archives
+        id: prepare
+        run: |
+          manifest="$(python3 scripts/release_assets.py prepare \
+            --event "$GITHUB_EVENT_PATH" --sha "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --inputs build/release-input --output build/release-assets)"
+          printf 'manifest=%s\n' "$manifest" >> "$GITHUB_OUTPUT"
+
+      - name: Attach and verify the complete asset set
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_MANIFEST: ${{ steps.prepare.outputs.manifest }}
+        run: |
+          python3 scripts/release_assets.py publish \
+            --event "$GITHUB_EVENT_PATH" --sha "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" --manifest "$RELEASE_MANIFEST"
