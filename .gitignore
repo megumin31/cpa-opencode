@@ -1,0 +1,10 @@
+/build/
+*.so
+*.dylib
+*.dll
+*.test
+/auths/
+config.yaml
+/cmd/hostcheck/servicecheck/*.log
+
+__pycache__/

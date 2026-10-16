@@ -1,0 +1,13 @@
+# Optional fragment under plugins.configs.opencode, for isolated testing only.
+# Verify current free eligibility independently. This guard makes no price claim.
+# Replace the placeholder with the exact final upstream ID, not a CPA alias.
+# Endpoint must exactly match the final POST URL, including protocol path/query.
+# Existing allowed_destinations still applies. Omit this whole block to disable.
+isolated_test_guard:
+  enabled: true
+  # Narrow final-wire Chat Completions text profile; default false if omitted.
+  # Requires one integer max_tokens/max_completion_tokens from 1 through 32.
+  strict_text_only: true
+  allowed_requests:
+    - model: REPLACE_WITH_VERIFIED_UPSTREAM_MODEL_ID
+      endpoint: https://opencode.ai/inference/openai/v1/chat/completions

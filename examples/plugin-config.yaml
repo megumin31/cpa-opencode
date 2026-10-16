@@ -1,0 +1,16 @@
+# Merge into your CPA configuration. Secrets belong only in private auth files.
+plugins:
+  enabled: true
+  dir: ./plugins
+  configs:
+    opencode:
+      enabled: true
+      request_timeout_seconds: 300
+      # Replaces (does not extend) the defaults. Omit to retain the same defaults.
+      # Keep /inference for Console's protocol-specific /inference/openai/v1 etc.
+      # /inference/v1 alone excludes those sibling paths.
+      allowed_destinations:
+        - https://opencode.ai/console
+        - https://opencode.ai/inference
+      # catalog_file: /absolute/path/to/trusted-catalog.json
+      # proxy_url: http://127.0.0.1:7890

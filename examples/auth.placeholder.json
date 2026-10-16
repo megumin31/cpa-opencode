@@ -1,0 +1,6 @@
+{
+  "type": "opencode",
+  "key": "REPLACE_WITH_YOUR_SERVICE_ACCOUNT_KEY",
+  "server": "https://opencode.ai/console",
+  "label": "My OpenCode workspace"
+}
