@@ -371,6 +371,55 @@ class PublishTests(FixtureCase):
         self.assertEqual(self.client.uploads, self.names)
         self.assertEqual(self.client.uploads[-1], self.manifest_path.name)
 
+    def test_lost_archive_response_is_reconciled_by_non_destructive_rerun(self):
+        original_upload = self.client.upload
+
+        def lose_response(release, path):
+            uploaded = original_upload(release, path)
+            if path.name == self.names[1]:
+                raise OSError("server accepted archive but response was lost")
+            return uploaded
+
+        with patch.object(self.client, "upload", side_effect=lose_response):
+            with self.assertRaises(OSError):
+                self.publish()
+        self.assertEqual(self.client.uploads, self.names[:2])
+        self.assertNotIn(self.manifest_path.name, self.client.uploads)
+        self.publish()
+        self.assertEqual(self.client.uploads, self.names)
+        self.assertEqual(self.client.deletions, [])
+
+    def test_lost_manifest_response_can_leave_complete_set_despite_job_failure(self):
+        original_upload = self.client.upload
+
+        def lose_response(release, path):
+            uploaded = original_upload(release, path)
+            if path.name == self.manifest_path.name:
+                raise OSError("server accepted manifest but response was lost")
+            return uploaded
+
+        with patch.object(self.client, "upload", side_effect=lose_response):
+            with self.assertRaises(OSError):
+                self.publish()
+        self.assertEqual(self.client.uploads, self.names)
+        self.client.uploads.clear()
+        self.publish()
+        self.assert_no_mutations()
+
+    def test_tag_moved_during_upload_stops_remaining_assets(self):
+        original_upload = self.client.upload
+
+        def move_tag(release, path):
+            uploaded = original_upload(release, path)
+            self.client.commit = "e" * 40
+            return uploaded
+
+        with patch.object(self.client, "upload", side_effect=move_tag):
+            with self.assertRaisesRegex(ValueError, "tag moved"):
+                self.publish()
+        self.assertEqual(self.client.uploads, self.names[:1])
+        self.assertNotIn(self.manifest_path.name, self.client.uploads)
+
     def test_corrupt_upload_fails_before_completion(self):
         self.client.corrupt_name = self.names[1]
         with self.assertRaisesRegex(ValueError, "digest verification"):

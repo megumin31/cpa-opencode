@@ -9,5 +9,13 @@ export GO PYTHON
 
 # Do not rely on go test ./... to enter the nested host module or execute tools.
 # Run serially even when the caller supplied -j: native checks share an artifact directory.
-make --no-print-directory -j1 test vet race sdkrepro hostcheck check-plugin-dir
+make --no-print-directory -j1 test vet race sdkrepro hostcheck
+# build/ also contains packaged artifacts from prior CI runs. It is a workspace,
+# not a deployment directory: validate the freshly built candidate in isolation.
+# The preflight fixtures above still reject duplicates in real plugin directories.
+candidate=$(mktemp -d)
+trap 'rm -rf -- "$candidate"' EXIT
+filename=$("$GO" run ./cmd/buildmeta --field filename)
+cp -- "build/$filename" "$candidate/$filename"
+make --no-print-directory -j1 check-plugin-dir PLUGIN_DIR="$candidate"
 printf '\nPASS: complete offline checks (both Go modules, Python/shell fixtures, SDK reproducer, native host quiesce/cancel-first/reconfigure/reenable)\n'
