@@ -12,6 +12,12 @@
 // closes its HTTP server first, canceling request contexts before plugin unload.
 // --cancel-first verifies that ordering against the same full native host bridge.
 //
+// --reenable disables an idle plugin, then opens the exact same library again
+// and verifies fresh registration and requests, exercising a second native init.
+//
+// --reconfigure changes configuration on the same loaded library under active
+// backpressure, then verifies old-stream retirement and fresh requests.
+//
 // --quiesce tests real version replacement, which invokes plugin.quiesce while
 // callbacks still work, then safely unloads both libraries. No CPA source is patched.
 package main
@@ -42,11 +48,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const (
-	pluginID     = "opencode"
-	modelID      = "opencode/p/m"
-	checkTimeout = 3 * time.Second
-)
+const checkTimeout = 3 * time.Second
+
+var pluginID, modelID string
 
 func main() {
 	// A wedged native callback must fail CI rather than leave the harness hung.
@@ -87,7 +91,7 @@ type mockUpstream struct {
 func newMockUpstream() *mockUpstream {
 	m := &mockUpstream{
 		failures:       make(chan error, 16),
-		closed:         map[string]chan struct{}{"execute": make(chan struct{}), "stream": make(chan struct{}), "blocked": make(chan struct{})},
+		closed:         map[string]chan struct{}{"execute": make(chan struct{}), "stream": make(chan struct{}), "blocked": make(chan struct{}), "fresh-execute": make(chan struct{}), "fresh-stream": make(chan struct{})},
 		blockedWritten: make(chan struct{}),
 	}
 	m.server = httptest.NewServer(http.HandlerFunc(m.serveHTTP))
@@ -183,7 +187,7 @@ func run() error {
 	strictText := false
 	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
 		switch args[0] {
-		case "--quiesce", "--disable", "--cancel-first":
+		case "--quiesce", "--disable", "--cancel-first", "--reconfigure", "--reenable":
 			mode = strings.TrimPrefix(args[0], "--")
 			args = args[1:]
 		case "--strict-text":
@@ -197,9 +201,18 @@ func run() error {
 		}
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("usage: hostcheck [--quiesce|--disable|--cancel-first] [--guard|--strict-text] /absolute/plugin/directory")
+		return fmt.Errorf("usage: hostcheck [--quiesce|--disable|--cancel-first|--reconfigure|--reenable] [--guard|--strict-text] /absolute/plugin/directory")
 	}
 	directory, err := filepath.Abs(args[0])
+	if err != nil {
+		return err
+	}
+	release, err := loadReleaseMetadata(directory)
+	if err != nil {
+		return err
+	}
+	pluginID, modelID = release.Provider, release.Provider+"/p/m"
+	replacementFilename, err := release.replacementFilename()
 	if err != nil {
 		return err
 	}
@@ -213,11 +226,11 @@ func run() error {
 	if err := os.Mkdir(pluginDirectory, 0700); err != nil {
 		return err
 	}
-	pluginBinary, err := os.ReadFile(filepath.Join(directory, "opencode-v0.1.0.so"))
+	pluginBinary, err := os.ReadFile(filepath.Join(directory, release.Filename))
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(pluginDirectory, "opencode-v0.1.0.so"), pluginBinary, 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(pluginDirectory, release.Filename), pluginBinary, 0700); err != nil {
 		return err
 	}
 	catalog := filepath.Join(temporary, "catalog.json")
@@ -251,8 +264,8 @@ func run() error {
 	}
 	host.ApplyConfig(ctx, hostConfig)
 	plugins := host.RegisteredPlugins()
-	if len(plugins) != 1 || plugins[0].ID != pluginID || plugins[0].Metadata.Version != "0.1.0" {
-		return fmt.Errorf("expected native plugin %s version 0.1.0, got %+v (the filename must be opencode-v0.1.0.so)", pluginID, plugins)
+	if len(plugins) != 1 || plugins[0].ID != pluginID || plugins[0].Metadata.Version != release.Version {
+		return fmt.Errorf("expected native plugin %s version %s, got %+v (the filename must be %s)", pluginID, release.Version, plugins, release.Filename)
 	}
 	if !host.HasAuthProvider(pluginID) {
 		return fmt.Errorf("auth provider not registered")
@@ -391,6 +404,12 @@ streamLoop:
 	host.CompleteRequest(ctx, pluginapi.RequestCompletion{RequestID: "stream"})
 	fmt.Println("PASS: native host streaming callbacks preserve SSE and terminate promptly on [DONE] with upstream kept open")
 
+	if mode == "reenable" {
+		// All initial requests have completed. Do not exercise the separate
+		// known host disable defect with an active blocked stream in this mode.
+		return verifyDisableEnable(ctx, host, hostConfig, upstream, release, raw)
+	}
+
 	request, options = requestFor(host, ctx, "blocked", true)
 	blocked, err := executor.ExecuteStream(ctx, auth, request, options)
 	if err != nil {
@@ -399,8 +418,9 @@ streamLoop:
 	if blocked == nil || blocked.Chunks == nil {
 		return fmt.Errorf("blocked native stream missing channel")
 	}
-	// Intentionally never read blocked.Chunks. Only --cancel-first cancels ctx
-	// before the action; other modes measure their deadline before cleanup cancellation.
+	// Do not read blocked.Chunks before the lifecycle action has returned. Only
+	// --cancel-first cancels ctx before that action; other modes assert their
+	// deadline and upstream retirement before any cleanup cancellation or drain.
 	if err := await(upstream.blockedWritten, "more than 16 upstream frames"); err != nil {
 		return err
 	}
@@ -410,7 +430,7 @@ streamLoop:
 	if mode == "quiesce" {
 		// CPA calls plugin.quiesce only when replacing a version. A second
 		// temporary copy of the same test binary exercises that real path.
-		if err := os.WriteFile(filepath.Join(pluginDirectory, "opencode-v0.1.1.so"), pluginBinary, 0700); err != nil {
+		if err := os.WriteFile(filepath.Join(pluginDirectory, replacementFilename), pluginBinary, 0700); err != nil {
 			return err
 		}
 		replaced := make(chan struct{})
@@ -428,6 +448,64 @@ streamLoop:
 			return fmt.Errorf("request context unexpectedly canceled before quiesce verification")
 		}
 		fmt.Println("PASS: real version-replacement plugin.quiesce closes a full 16-slot host bridge and joins blocked workers")
+	}
+	if mode == "reconfigure" {
+		if ctx.Err() != nil {
+			return fmt.Errorf("caller context canceled before reconfigure")
+		}
+		select {
+		case <-upstream.closed["blocked"]:
+			return fmt.Errorf("old upstream request ended before reconfigure")
+		default:
+		}
+		before, err := os.Stat(filepath.Join(pluginDirectory, release.Filename))
+		if err != nil {
+			return err
+		}
+		// A different timeout proves a real config update, with exactly the same
+		// native path/version. No replacement library or pre-quiesce is involved.
+		var updatedNode yaml.Node
+		updatedYAML := strings.Replace(pluginConfig, "request_timeout_seconds: 30", "request_timeout_seconds: 31", 1)
+		if err := yaml.Unmarshal([]byte(updatedYAML), &updatedNode); err != nil {
+			return err
+		}
+		updatedConfig := *hostConfig
+		updatedConfig.Plugins = hostConfig.Plugins
+		updatedConfig.Plugins.Configs = map[string]config.PluginInstanceConfig{pluginID: {Enabled: &enabled, Raw: updatedNode}}
+		reconfigured := make(chan struct{})
+		go func() { host.ApplyConfig(ctx, &updatedConfig); close(reconfigured) }()
+		if err := await(reconfigured, "same-instance reconfigure with blocked host.stream.emit"); err != nil {
+			return err
+		}
+		if err := await(upstream.closed["blocked"], "old upstream cancellation during same-instance reconfigure"); err != nil {
+			return err
+		}
+		if ctx.Err() != nil {
+			return fmt.Errorf("caller context canceled before reconfigure retirement verification")
+		}
+		after, err := os.Stat(filepath.Join(pluginDirectory, release.Filename))
+		if err != nil || !os.SameFile(before, after) || before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
+			return fmt.Errorf("reconfigure changed the native library file: %v", err)
+		}
+		plugins := host.RegisteredPlugins()
+		if len(plugins) != 1 || plugins[0].ID != pluginID || plugins[0].Metadata.Version != release.Version {
+			return fmt.Errorf("same-instance registration changed after reconfigure: %+v", plugins)
+		}
+		// Drain only after ApplyConfig and upstream retirement have succeeded.
+		// This checks the old terminal notification without relieving the
+		// backpressure that the lifecycle transition was required to handle.
+		if err := verifyRetiredStream(blocked); err != nil {
+			return err
+		}
+		host.CompleteRequest(ctx, pluginapi.RequestCompletion{RequestID: "blocked"})
+		models := host.ModelsForAuth(ctx, auth)
+		if models.Err != nil || !models.Handled || len(models.Models) != 1 || models.Models[0].ID != modelID {
+			return fmt.Errorf("fresh discovery after reconfigure failed: %+v", models)
+		}
+		if err := verifyFreshRequests(ctx, host, executor, auth, upstream); err != nil {
+			return err
+		}
+		fmt.Println("PASS: same-instance ApplyConfig retires a blocked stream without canceling the caller; fresh discovery, aggregate and streaming requests succeed")
 	}
 	if mode == "cancel-first" {
 		// Match Service.Shutdown's ordering: HTTP request cancellation precedes
@@ -452,6 +530,9 @@ streamLoop:
 		if mode == "quiesce" {
 			action = "native ShutdownAll after version-replacement quiesce"
 		}
+		if mode == "reconfigure" {
+			action = "native ShutdownAll after same-instance reconfigure and fresh requests"
+		}
 		go func() { host.ShutdownAll(); close(finished) }()
 	}
 	if err := await(finished, action); err != nil {
@@ -475,7 +556,11 @@ streamLoop:
 	if mode == "cancel-first" && ctx.Err() == nil {
 		return fmt.Errorf("request context was not canceled before native unload")
 	}
-	if upstream.configCalls.Load() != 3 || upstream.inferenceCalls.Load() != 9 {
+	wantConfig, wantInference := int32(3), int32(9)
+	if mode == "reconfigure" {
+		wantConfig, wantInference = 4, 11
+	}
+	if upstream.configCalls.Load() != wantConfig || upstream.inferenceCalls.Load() != wantInference {
 		return fmt.Errorf("unexpected mock calls: discovery=%d inference=%d", upstream.configCalls.Load(), upstream.inferenceCalls.Load())
 	}
 	select {
@@ -484,6 +569,8 @@ streamLoop:
 	default:
 	}
 	switch mode {
+	case "reconfigure":
+		fmt.Println("PASS: reconfigured native library unloaded cleanly after new requests completed")
 	case "quiesce":
 		fmt.Println("PASS: replacement and retired native libraries unloaded cleanly after quiesce")
 	case "cancel-first":

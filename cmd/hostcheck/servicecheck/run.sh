@@ -13,6 +13,7 @@ cp -- "$module/go.sum" "$manifest/servicecheck.sum"
 cd -- "$module"
 # The default is deliberately cache-only. Pre-cache the exact CPA 8.0.29 Go
 # dependencies in an authorized development step before running this harness.
-export GOPROXY=off GOSUMDB=off
+export GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local
+filename=$("$go" -C "$project" run -mod=readonly ./cmd/buildmeta --field filename)
 "$go" run -mod=mod -modfile="$manifest/servicecheck.mod" ./servicecheck \
-  -plugin "$project/build/opencode-v0.1.0.so" "$@"
+  -plugin "$project/build/$filename" "$@"

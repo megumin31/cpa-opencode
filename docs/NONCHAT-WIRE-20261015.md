@@ -67,6 +67,6 @@ successful native text/usage aggregation.
 - TLS/HTTP2 fingerprints, real proxies, external transport and upstream enforcement
   remain unverified. No claim about the historical live HTTP 403 is made.
 
-See `cmd/officialwire/README.md` for reproduction. Generated fake runtime state
+See `tools/officialwire/README.md` for reproduction. Generated fake runtime state
 is excluded from source archives; a compact evidence package retains captures,
 CLI output, manifests and native comparison reports without shipping auth stores.

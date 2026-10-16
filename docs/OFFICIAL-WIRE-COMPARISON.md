@@ -38,7 +38,7 @@ This hash belongs to the synthetic captured fixture, including its generated
 system context; another fresh official session can produce a different hash.
 
 The official and plugin test runners are retained under
-[`cmd/officialwire`](../cmd/officialwire/README.md) and `cmd/hostcheck/wirecheck`.
+[`tools/officialwire`](../tools/officialwire/README.md) and `cmd/hostcheck/wirecheck`.
 Captures record binary revisions/hashes and all fake-only headers/body fields.
 
 ## Deliberate and unverified differences

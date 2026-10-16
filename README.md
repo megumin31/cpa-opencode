@@ -139,16 +139,41 @@ curl http://localhost:8317/v1/chat/completions \
 
 ## Building from Source
 
-Requires Go 1.22+ and a C compiler (GCC or Clang):
+Requires Go **1.26+** (CI pins 1.26.9), a C compiler, Python 3, GNU Make,
+Bash, and GNU `timeout`. Native-host checks run on Linux with CGO enabled.
 
 ```bash
-# Run tests
-make test
+# Prepare both module caches once while dependency downloads are allowed.
+go mod download
+go -C cmd/hostcheck mod download
 
-# Build C-shared plugin
+# Complete offline verification, including the real native host against mocks.
+make check-offline
+
+# Build only; the C ABI entry point remains the repository root package.
 make build
 # Output binary: build/opencode-v0.1.0.so
+
+# Print provider, version, and library filename from the shared Go constants.
+make metadata
 ```
+
+`check-offline` runs ordinary tests, vet, and race tests for both Go modules;
+Python fixtures; shell/preflight tests; the SDK reproducer; and bounded native
+host `--quiesce`, `--cancel-first`, same-instance `--reconfigure`, and idle
+`--reenable` checks. It disables module/network toolchain
+downloads and uses fake loopback services. It does not establish live-service
+access, pricing, or entitlement.
+
+The pinned CPA host's known disable-path failure remains a separate strict
+`make hostcheck-known-bug` target. It is deliberately excluded from the passing
+gate and is never ignored. See [build and verification details](docs/BUILD.md).
+
+The repository separates the root C ABI shim from the Go plugin engine and its
+internal catalog, protocol, diagnostics, and error packages. Developer-only
+Python capture tools live in `tools/officialwire`; `cmd/hostcheck` stays an
+independent, version-pinned Go module because it exercises CPA's internal host.
+See [architecture and dependency boundaries](docs/ARCHITECTURE.md).
 
 ---
 

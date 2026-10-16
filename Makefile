@@ -1,25 +1,68 @@
-.PHONY: test race vet build hostcheck hostcheck-known-bug sdkrepro check-plugin-dir
-PLUGIN := build/opencode-v0.1.0.so
-
-test:
-	go test ./... -count=1
-	bash scripts/check-plugin-directory-test.sh
-race:
-	go test -race ./... -count=1
-vet:
-	go vet ./...
-build:
-	mkdir -p build
-	CGO_ENABLED=1 go build -buildmode=c-shared -o $(PLUGIN) .
-hostcheck: build
-	go -C cmd/hostcheck run . --quiesce $(abspath build)
-	go -C cmd/hostcheck run . --cancel-first $(abspath build)
-hostcheck-known-bug: build
-	go -C cmd/hostcheck run . --disable $(abspath build)
-sdkrepro:
-	go run ./cmd/sdkrepro
-
-# Read-only deployment preflight; override PLUGIN_DIR for the actual host directory.
+SHELL := /bin/bash
+GO ?= go
+PYTHON ?= python3
+TEST_TIMEOUT ?= 5m
+HOSTCHECK_TIMEOUT ?= 45s
 PLUGIN_DIR ?= build
+
+.PHONY: check-offline test test-main test-host fixtures preflight race vet build build-hostcheck hostcheck hostcheck-known-bug sdkrepro check-plugin-dir metadata
+
+# One complete, network-independent verification entry point, also used by CI.
+# Populate both modules' dependency caches beforehand; see docs/BUILD.md.
+check-offline:
+	GO="$(GO)" PYTHON="$(PYTHON)" bash scripts/check-offline.sh
+
+test: test-main test-host fixtures preflight
+
+test-main:
+	$(GO) test ./... -count=1 -timeout=$(TEST_TIMEOUT)
+
+test-host:
+	$(GO) -C cmd/hostcheck test ./... -count=1 -timeout=$(TEST_TIMEOUT)
+
+fixtures:
+	$(PYTHON) -m unittest discover -s tools/officialwire -p 'test_*.py' -v
+
+preflight:
+	@for script in scripts/*.sh cmd/hostcheck/servicecheck/run.sh; do bash -n "$$script" || exit; done
+	GO="$(GO)" bash scripts/check-plugin-directory-test.sh
+
+race:
+	$(GO) test -race ./... -count=1 -timeout=$(TEST_TIMEOUT)
+	$(GO) -C cmd/hostcheck test -race ./... -count=1 -timeout=$(TEST_TIMEOUT)
+
+vet:
+	$(GO) vet ./...
+	$(GO) -C cmd/hostcheck vet ./...
+
+metadata:
+	$(GO) run ./cmd/buildmeta
+
+build:
+	@set -eu; filename="$$($(GO) run ./cmd/buildmeta --field filename)"; \
+	mkdir -p build; \
+	CGO_ENABLED=1 $(GO) build -buildmode=c-shared -o "build/$$filename" .; \
+	$(GO) run ./cmd/buildmeta > build/plugin-metadata.json
+
+build-hostcheck:
+	@mkdir -p build
+	CGO_ENABLED=1 $(GO) -C cmd/hostcheck build -o "$(abspath build/hostcheck)" .
+
+hostcheck: build build-hostcheck
+	timeout --signal=TERM --kill-after=5s $(HOSTCHECK_TIMEOUT) build/hostcheck --quiesce "$(abspath build)"
+	timeout --signal=TERM --kill-after=5s $(HOSTCHECK_TIMEOUT) build/hostcheck --cancel-first "$(abspath build)"
+	timeout --signal=TERM --kill-after=5s $(HOSTCHECK_TIMEOUT) build/hostcheck --reconfigure "$(abspath build)"
+	timeout --signal=TERM --kill-after=5s $(HOSTCHECK_TIMEOUT) build/hostcheck --reenable "$(abspath build)"
+
+# Deliberately outside check-offline: the pinned host's disable-path regression
+# remains a strict, separately reportable failure. Never suppress its exit code.
+hostcheck-known-bug: build build-hostcheck
+	timeout --signal=TERM --kill-after=5s $(HOSTCHECK_TIMEOUT) build/hostcheck --disable "$(abspath build)"
+
+sdkrepro:
+	$(GO) run ./cmd/sdkrepro
+
+# Read-only deployment preflight; override PLUGIN_DIR for the host directory.
 check-plugin-dir:
-	bash scripts/check-plugin-directory.sh "$(PLUGIN_DIR)"
+	@set -eu; filename="$$($(GO) run ./cmd/buildmeta --field filename)"; \
+	bash scripts/check-plugin-directory.sh "$(PLUGIN_DIR)" "$$filename"

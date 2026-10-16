@@ -59,22 +59,54 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/megumin31/cpa-opencode-zen/internal/fault"
+	"github.com/megumin31/cpa-opencode-zen/internal/plugin"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
+	"sync"
 	"unsafe"
 )
 
 func main() {}
 
+type hostStreams struct{}
+
+func (hostStreams) Emit(id string, payload []byte) error {
+	_, err := callHost("host.stream.emit", map[string]any{"stream_id": id, "payload": payload})
+	return err
+}
+func (hostStreams) Close(id, message string) error {
+	_, err := callHost("host.stream.close", map[string]any{"stream_id": id, "error": message})
+	return err
+}
+
+// Go shared libraries may remain mapped after dlclose (ELF NODELETE). An ABI
+// initialization therefore owns a fresh Engine lifetime, independent of package
+// initialization. The ABI has no per-call instance pointer, so only one active
+// host binding is allowed per loaded image.
+var abiRuntime struct {
+	lifecycle sync.Mutex
+	mu        sync.RWMutex
+	engine    *plugin.Engine
+}
+
 //export cliproxy_plugin_init
-func cliproxy_plugin_init(host *C.cliproxy_host_api, plugin *C.cliproxy_plugin_api) C.int {
-	if plugin == nil || host == nil || host.abi_version != 1 {
+func cliproxy_plugin_init(host *C.cliproxy_host_api, api *C.cliproxy_plugin_api) C.int {
+	if api == nil || host == nil || host.abi_version != 1 {
 		return 1
 	}
+	abiRuntime.lifecycle.Lock()
+	defer abiRuntime.lifecycle.Unlock()
+	abiRuntime.mu.Lock()
+	defer abiRuntime.mu.Unlock()
+	if abiRuntime.engine != nil {
+		return 1
+	} // Never steal an active host binding.
 	C.store_host_api(host)
-	plugin.abi_version = 1
-	plugin.call = C.cliproxy_plugin_call_fn(C.cliproxyPluginCall)
-	plugin.free_buffer = C.cliproxy_plugin_free_fn(C.cliproxyPluginFree)
-	plugin.shutdown = C.cliproxy_plugin_shutdown_fn(C.cliproxyPluginShutdown)
+	abiRuntime.engine = plugin.New(plugin.Dependencies{Streams: hostStreams{}})
+	api.abi_version = 1
+	api.call = C.cliproxy_plugin_call_fn(C.cliproxyPluginCall)
+	api.free_buffer = C.cliproxy_plugin_free_fn(C.cliproxyPluginFree)
+	api.shutdown = C.cliproxy_plugin_shutdown_fn(C.cliproxyPluginShutdown)
 	return 0
 }
 
@@ -92,14 +124,21 @@ func cliproxyPluginCall(method *C.char, request *C.uint8_t, requestLen C.size_t,
 		}
 	}()
 	if method == nil || requestLen > 64*1024*1024 || (requestLen > 0 && request == nil) {
-		writeResponse(response, errorEnvelope(fail(400, "invalid RPC request")))
+		writeResponse(response, errorEnvelope(fault.New(400, "invalid RPC request")))
 		return 1
 	}
 	var raw []byte
 	if requestLen > 0 {
 		raw = C.GoBytes(unsafe.Pointer(request), C.int(requestLen))
 	}
-	result, err := handleMethod(C.GoString(method), raw)
+	abiRuntime.mu.RLock()
+	engine := abiRuntime.engine
+	abiRuntime.mu.RUnlock()
+	if engine == nil {
+		writeResponse(response, errorEnvelope(fault.New(503, "plugin is not initialized")))
+		return 1
+	}
+	result, err := engine.Handle(C.GoString(method), raw)
 	if err != nil {
 		writeResponse(response, errorEnvelope(err))
 		return 1
@@ -122,7 +161,20 @@ func cliproxyPluginFree(ptr unsafe.Pointer, _ C.size_t) {
 }
 
 //export cliproxyPluginShutdown
-func cliproxyPluginShutdown() { shutdown(); C.store_host_api(nil) }
+func cliproxyPluginShutdown() {
+	abiRuntime.lifecycle.Lock()
+	defer abiRuntime.lifecycle.Unlock()
+	abiRuntime.mu.Lock()
+	engine := abiRuntime.engine
+	abiRuntime.engine = nil
+	abiRuntime.mu.Unlock()
+	if engine != nil {
+		engine.Shutdown()
+	}
+	// Retired Engine workers and cancellation callbacks have all returned, so
+	// no remaining Go operation can call through this host allocation.
+	C.store_host_api(nil)
+}
 
 func writeResponse(response *C.cliproxy_buffer, raw []byte) {
 	if response == nil || len(raw) == 0 {
@@ -133,9 +185,12 @@ func writeResponse(response *C.cliproxy_buffer, raw []byte) {
 }
 func errorEnvelope(err error) []byte {
 	status := 500
-	var e *statusError
+	var e interface {
+		error
+		StatusCode() int
+	}
 	if errors.As(err, &e) {
-		status = e.status
+		status = e.StatusCode()
 	}
 	out, _ := pluginabi.NewErrorEnvelope("opencode_error", err.Error(), status)
 	return out

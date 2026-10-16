@@ -41,13 +41,16 @@ func main() {
 }
 
 func run() error {
-	pluginPath := flag.String("plugin", "../../build/opencode-v0.1.0.so", "native plugin binary")
+	pluginPath := flag.String("plugin", "", "native versioned plugin binary (required)")
 	catalogPath := flag.String("catalog", "/workspace/shared/opencode-v2-inspection/public-catalog-20261015.json", "trusted public catalog snapshot")
 	referencePath := flag.String("reference", "/workspace/shared/cliproxyapi-reference", "CPA reference checkout for local catalog files")
 	packageOverride := flag.Bool("package-override", false, "mock explicit opencode provider package override")
 	watcherCycle := flag.Bool("watcher-cycle", true, "verify actual file watcher disable and re-enable publication")
 	debug := flag.Bool("debug", false, "enable CPA debug logs")
 	flag.Parse()
+	if *pluginPath == "" {
+		return fmt.Errorf("-plugin must name the native versioned library; use servicecheck/run.sh for the project build")
+	}
 	log.SetLevel(log.WarnLevel)
 	if *debug {
 		log.SetLevel(log.DebugLevel)
@@ -69,7 +72,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(pluginDir, "opencode-v0.1.0.so"), binary, 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(pluginDir, filepath.Base(*pluginPath)), binary, 0700); err != nil {
 		return err
 	}
 	catalog, err := filepath.Abs(*catalogPath)

@@ -3,6 +3,11 @@ name: Build Linux plugins
 'on':
   push:
   workflow_dispatch:
+    inputs:
+      check_known_host_bug:
+        description: 'Also run the strict known-failing CPA disable regression (expected to fail)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -46,9 +51,11 @@ jobs:
         with:
           go-version: '1.26.9'
           cache: true
-          cache-dependency-path: go.sum
+          cache-dependency-path: |
+            go.sum
+            cmd/hostcheck/go.sum
 
-      - name: Build and verify C-shared plugin
+      - name: Complete offline checks and verify C-shared plugin
         run: bash scripts/ci-build.sh
 
       - name: Upload plugin and checksums
@@ -58,6 +65,12 @@ jobs:
           path: build/ci-artifact/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Reproduce known host disable failure (opt-in, strict)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.check_known_host_bug }}
+        run: |
+          set -o pipefail
+          GOPROXY=off GOSUMDB=off make hostcheck-known-bug 2>&1 | tee build/ci-logs/known-host-disable.log
 
       - name: Retain build diagnostics
         if: ${{ always() }}

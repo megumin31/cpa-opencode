@@ -106,14 +106,14 @@ func main() {
 		os.Exit(1)
 	})
 	defer watchdog.Stop()
-	plugin := flag.String("plugin", "../../build/opencode-v0.1.0.so", "C-shared plugin file")
+	plugin := flag.String("plugin", "", "versioned C-shared plugin file (required)")
 	official := flag.String("official", "", "official fake loopback capture JSON array")
 	protocol := flag.String("protocol", "chat", "captured protocol: chat, responses, anthropic, gemini")
 	post := flag.Int("post", 0, "zero-based POST ordinal to replay")
 	output := flag.String("output", "", "output capture and comparison JSON file")
 	requireAligned := flag.Bool("require-aligned-headers", false, "require POST Accept: */* and no credential x-org-id header")
 	flag.Parse()
-	if *official == "" || *output == "" || flag.NArg() != 0 {
+	if *plugin == "" || *official == "" || *output == "" || flag.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "usage: wirecheck -plugin /path/plugin.so -official /path/official.json -output /path/result.json [-require-aligned-headers]")
 		os.Exit(1)
 	}
@@ -242,7 +242,7 @@ func runProtocol(pluginPath, officialPath, outputPath string, requireAligned boo
 		return err
 	}
 	// Isolate native-host cleanup from the actual build directory.
-	if err := os.WriteFile(filepath.Join(pluginDir, "opencode-v0.1.0.so"), binary, 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(pluginDir, filepath.Base(pluginPath)), binary, 0700); err != nil {
 		return err
 	}
 	catalog := filepath.Join(tmp, "catalog.json")
