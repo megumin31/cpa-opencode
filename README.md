@@ -75,6 +75,11 @@ plugins:
         - https://opencode.ai/inference
 ```
 
+Optional: set `worker_endpoint` to your trusted HTTPS Worker origin and
+`worker_token` to its entry token to route Console, catalog and inference through
+one Worker. Omit/empty `worker_endpoint` keeps existing direct access. See
+[Custom endpoint / 自定义端点](docs/CUSTOM-ENDPOINT.md). No automatic direct fallback.
+
 ### 3. Add OpenCode Auth File
 
 Place an auth JSON file in your CPA `auth-dir` (default: `~/.cli-proxy-api/opencode.json`):

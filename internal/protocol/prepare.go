@@ -260,7 +260,7 @@ func nativeChatSupportsStore(r catalog.Route) bool {
 func forbiddenHeader(k string) bool {
 	k = strings.ToLower(k)
 	switch k {
-	case "authorization", "proxy-authorization", "x-api-key", "x-goog-api-key", "x-org-id", "x-opencode-session", "x-opencode-session-id", "x-opencode-parent-session-id", "x-opencode-client", "x-opencode-project", "x-parent-session-id", "x-session-affinity", "x-session-id", "cookie", "set-cookie", "host", "content-length", "connection", "transfer-encoding", "user-agent", "x-cliproxy-opencode-request":
+	case "x-cpa-gateway-token", "authorization", "proxy-authorization", "x-api-key", "x-goog-api-key", "x-org-id", "x-opencode-session", "x-opencode-session-id", "x-opencode-parent-session-id", "x-opencode-client", "x-opencode-project", "x-parent-session-id", "x-session-affinity", "x-session-id", "cookie", "set-cookie", "host", "content-length", "connection", "transfer-encoding", "user-agent", "x-cliproxy-opencode-request":
 		return true
 	}
 	return strings.HasPrefix(k, "x-opencode-client-")

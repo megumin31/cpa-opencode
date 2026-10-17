@@ -69,6 +69,8 @@ type activeRequest struct {
 }
 
 type pluginConfig struct {
+	WorkerEndpoint        string              `yaml:"worker_endpoint"`
+	WorkerToken           string              `yaml:"worker_token"`
 	AllowedDestinations   []string            `yaml:"allowed_destinations"`
 	AllowLoopbackHTTP     bool                `yaml:"allow_loopback_http"`
 	CatalogFile           string              `yaml:"catalog_file"`
@@ -81,7 +83,7 @@ func defaultConfig() pluginConfig {
 	return pluginConfig{AllowedDestinations: []string{"https://opencode.ai/console", "https://opencode.ai/inference"}}
 }
 func (c pluginConfig) transportPolicy() transport.Policy {
-	return transport.Policy{AllowedDestinations: c.AllowedDestinations, AllowLoopbackHTTP: c.AllowLoopbackHTTP, ProxyURL: c.ProxyURL}
+	return transport.Policy{AllowedDestinations: c.AllowedDestinations, AllowLoopbackHTTP: c.AllowLoopbackHTTP, ProxyURL: c.ProxyURL, WorkerEndpoint: c.WorkerEndpoint, WorkerToken: c.WorkerToken}
 }
 
 func New(deps Dependencies) *Engine {

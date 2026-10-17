@@ -28,9 +28,14 @@ type Policy struct {
 	AllowedDestinations []string
 	AllowLoopbackHTTP   bool
 	ProxyURL            string
+	WorkerEndpoint      string
+	WorkerToken         string
 }
 
 func ValidatePolicy(cfg Policy) error {
+	if err := validateWorker(cfg); err != nil {
+		return err
+	}
 	if len(cfg.AllowedDestinations) == 0 {
 		return fail(400, "allowed_destinations must not be empty")
 	}
@@ -247,6 +252,11 @@ func (p *Pool) Do(ctx context.Context, cfg Policy, credentialProxy, hostProxy, m
 			return nil, err
 		}
 	}
+	// Validate the original destination before mapping; never fall back to direct.
+	wireTarget, err := workerTarget(cfg, target)
+	if err != nil {
+		return nil, err
+	}
 	opts, ok := ctx.Value(transportOptionsKey{}).(Options)
 	if !ok {
 		opts, _ = ParseOptions(nil)
@@ -278,6 +288,13 @@ func (p *Pool) Do(ctx context.Context, cfg Policy, credentialProxy, hostProxy, m
 		}
 		headers.Set("Content-Encoding", opts.Encoding)
 	}
+	// Caller-supplied gateway credentials must never escape on direct requests.
+	headers.Del("X-CPA-Gateway-Token")
+	if cfg.WorkerEndpoint != "" {
+		headers.Del("Cookie")
+		headers.Del("Proxy-Authorization")
+		headers.Set("X-CPA-Gateway-Token", cfg.WorkerToken)
+	}
 	proxy := hostProxy
 	if cfg.ProxyURL != "" {
 		proxy = cfg.ProxyURL
@@ -290,7 +307,7 @@ func (p *Pool) Do(ctx context.Context, cfg Policy, credentialProxy, hostProxy, m
 		return nil, err
 	}
 	requestCtx, cancel := context.WithCancelCause(ctx)
-	req, err := http.NewRequestWithContext(requestCtx, method, target, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(requestCtx, method, wireTarget, bytes.NewReader(body))
 	if err != nil {
 		cancel(nil)
 		return nil, fail(400, "invalid upstream request")

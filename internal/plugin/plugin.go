@@ -25,6 +25,8 @@ func registration() any {
 		"metadata": pluginapi.Metadata{Name: buildinfo.ProviderID, Version: buildinfo.Version, Author: "Megumin", GitHubRepository: "megumin31/cpa-opencode-zen", ConfigFields: []pluginapi.ConfigField{
 			{Name: "allowed_destinations", Type: pluginapi.ConfigFieldTypeArray, Default: defaultConfig().AllowedDestinations, Description: "Exact HTTPS URL prefixes allowed to receive service keys. No redirects."},
 			{Name: "catalog_file", Type: pluginapi.ConfigFieldTypeString, Description: "Optional trusted models.opencode.ai catalog JSON snapshot."},
+			{Name: "worker_endpoint", Type: pluginapi.ConfigFieldTypeString, Description: "Optional trusted HTTPS Worker origin. Empty keeps direct OpenCode access. Requires worker_token; never falls back to direct."},
+			{Name: "worker_token", Type: pluginapi.ConfigFieldTypeString, Description: "Secret Worker entry token; must match the Worker GATEWAY_TOKEN secret. Never an upstream service key."},
 			{Name: "proxy_url", Type: pluginapi.ConfigFieldTypeString, Description: "Optional outbound HTTP(S)/SOCKS5 proxy; otherwise host proxy is used."},
 			{Name: "isolated_test_guard", Type: pluginapi.ConfigFieldTypeObject, Description: "Optional isolated-test restriction: enabled:true with exact final model/endpoint allowed_requests pairs. Does not determine price. Omit for normal operation."},
 		}},

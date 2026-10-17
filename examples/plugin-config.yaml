@@ -1,4 +1,4 @@
-# Merge into your CPA configuration. Secrets belong only in private auth files.
+# Merge into your private CPA configuration. Never commit actual secrets.
 plugins:
   enabled: true
   dir: ./plugins
@@ -14,3 +14,7 @@ plugins:
         - https://opencode.ai/inference
       # catalog_file: /absolute/path/to/trusted-catalog.json
       # proxy_url: http://127.0.0.1:7890
+      # Optional trusted Worker gateway; empty/omitted preserves direct access.
+      # See docs/CUSTOM-ENDPOINT.md. The Worker receives upstream keys and request bodies.
+      # worker_endpoint: https://YOUR-WORKER.YOUR-SUBDOMAIN.workers.dev
+      # worker_token: REPLACE_WITH_PRIVATE_ENTRY_TOKEN

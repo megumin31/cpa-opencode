@@ -114,7 +114,7 @@ func (e *Engine) execute(raw []byte, stream bool) (any, error) {
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		e.cooldowns.rememberHeaders(c, resp.StatusCode, resp.Header)
-		diagnostic := diagnostics.CaptureHTTP(ctx, resp, diagnosticSecrets(c, headers, target, proxy, g.config.ProxyURL))
+		diagnostic := diagnostics.CaptureHTTP(ctx, resp, append(diagnosticSecrets(c, headers, target, proxy, g.config.ProxyURL), g.config.WorkerToken))
 		diagnostics.Log("upstream", diagnostic, e.logf)
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			invalidate(g, c)
@@ -122,7 +122,7 @@ func (e *Engine) execute(raw []byte, stream bool) (any, error) {
 		}
 		return nil, diagnostic.ClientError()
 	}
-	ctx = diagnostics.WithSSE(ctx, resp, diagnosticSecrets(c, headers, target, proxy, g.config.ProxyURL), e.logf)
+	ctx = diagnostics.WithSSE(ctx, resp, append(diagnosticSecrets(c, headers, target, proxy, g.config.ProxyURL), g.config.WorkerToken), e.logf)
 	// Native adapters parse the requested event stream independently of MIME labels.
 	// The bounded SSE parser and protocol completion checks validate the body.
 	if stream {
