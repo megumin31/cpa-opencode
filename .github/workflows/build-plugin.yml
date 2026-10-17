@@ -2,21 +2,16 @@ name: Build Linux plugins
 
 'on':
   push:
-  release:
-    types: [published]
-  workflow_dispatch:
-    inputs:
-      check_known_host_bug:
-        description: 'Also run the strict known-failing CPA disable regression (expected to fail)'
-        type: boolean
-        default: false
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
 
 permissions:
   contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'release' }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
@@ -70,12 +65,6 @@ jobs:
           overwrite: true
           retention-days: 14
 
-      - name: Reproduce known host disable failure (opt-in, strict)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.check_known_host_bug }}
-        run: |
-          set -o pipefail
-          GOPROXY=off GOSUMDB=off make hostcheck-known-bug 2>&1 | tee build/ci-logs/known-host-disable.log
-
       - name: Retain build diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -87,8 +76,8 @@ jobs:
           retention-days: 14
 
   publish:
-    name: Attach verified release assets
-    if: ${{ github.event_name == 'release' && github.event.action == 'published' }}
+    name: Publish verified tag release
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
     needs: build
     runs-on: ubuntu-22.04
     timeout-minutes: 15
@@ -125,7 +114,7 @@ jobs:
             --inputs build/release-input --output build/release-assets)"
           printf 'manifest=%s\n' "$manifest" >> "$GITHUB_OUTPUT"
 
-      - name: Attach and verify the complete asset set
+      - name: Upload verified draft assets and publish
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_MANIFEST: ${{ steps.prepare.outputs.manifest }}

@@ -32,8 +32,8 @@ The upstream catalog changes over time; use CPA’s /v1/models for the actual li
 
 ### 1. Download Pre-built Binary
 
-Published [Releases](https://github.com/megumin31/cpa-opencode-zen/releases) build
-both architectures and attach `opencode-<tag>-linux-amd64.tar.gz` and
+Pushing a version tag automatically builds both architectures and publishes a
+verified [Release](https://github.com/megumin31/cpa-opencode-zen/releases) with `opencode-<tag>-linux-amd64.tar.gz` and
 `opencode-<tag>-linux-arm64.tar.gz`, checksums and a completion manifest after
 both native gates pass. Choose your architecture, verify the checksums, and
 extract the archive without renaming its `.so`. See [release instructions and
@@ -161,7 +161,7 @@ make check-offline
 
 # Build only; the C ABI entry point remains the repository root package.
 make build
-# Output binary: build/opencode-v0.1.0.so
+# Development binary: build/opencode-v0.0.0.so (build_tag=dev)
 
 # Print provider, version, and library filename from the shared Go constants.
 make metadata

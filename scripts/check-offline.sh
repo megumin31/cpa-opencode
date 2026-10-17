@@ -15,7 +15,7 @@ make --no-print-directory -j1 test vet race sdkrepro hostcheck
 # The preflight fixtures above still reject duplicates in real plugin directories.
 candidate=$(mktemp -d)
 trap 'rm -rf -- "$candidate"' EXIT
-filename=$("$GO" run ./cmd/buildmeta --field filename)
+filename=$(make --no-print-directory metadata | python3 -c 'import json,sys; print(json.load(sys.stdin)["filename"])')
 cp -- "build/$filename" "$candidate/$filename"
 make --no-print-directory -j1 check-plugin-dir PLUGIN_DIR="$candidate"
 printf '\nPASS: complete offline checks (both Go modules, Python/shell fixtures, SDK reproducer, native host quiesce/cancel-first/reconfigure/reenable)\n'

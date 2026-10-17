@@ -13,7 +13,8 @@ import (
 )
 
 const providerID = buildinfo.ProviderID
-const version = buildinfo.Version
+
+var version = buildinfo.Version
 
 const internalRequestHeader = "X-Cliproxy-Opencode-Request"
 

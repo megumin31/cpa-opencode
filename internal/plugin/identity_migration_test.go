@@ -4,13 +4,15 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/megumin31/cpa-opencode-zen/internal/buildinfo"
+
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
 func TestPluginIdentityIndependentOfApplicationVersion(t *testing.T) {
 	engine := newTestEngine(t)
 
-	if providerID != "opencode" || version != "0.1.0" {
+	if providerID != "opencode" || version != buildinfo.Version {
 		t.Fatalf("unexpected identity %s/%s", providerID, version)
 	}
 	for _, method := range []string{"auth.identifier", "executor.identifier"} {
@@ -26,7 +28,7 @@ func TestPluginIdentityIndependentOfApplicationVersion(t *testing.T) {
 	if err := json.Unmarshal(raw, &r); err != nil {
 		t.Fatal(err)
 	}
-	if r.Metadata.Name != "opencode" || r.Metadata.Version != "0.1.0" || r.Metadata.GitHubRepository != "megumin31/cpa-opencode-zen" {
+	if r.Metadata.Name != "opencode" || r.Metadata.Version != buildinfo.Version || r.Metadata.GitHubRepository != "megumin31/cpa-opencode-zen" {
 		t.Fatalf("metadata: %+v", r.Metadata)
 	}
 }

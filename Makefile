@@ -4,6 +4,9 @@ PYTHON ?= python3
 TEST_TIMEOUT ?= 5m
 HOSTCHECK_TIMEOUT ?= 45s
 PLUGIN_DIR ?= build
+VERSION ?= 0.0.0
+BUILD_TAG ?= dev
+VERSION_LDFLAGS = -X github.com/megumin31/cpa-opencode-zen/internal/buildinfo.Version=$(VERSION) -X github.com/megumin31/cpa-opencode-zen/internal/buildinfo.BuildTag=$(BUILD_TAG)
 
 .PHONY: check-offline test test-main test-host fixtures preflight race vet build build-hostcheck hostcheck hostcheck-known-bug sdkrepro check-plugin-dir metadata
 
@@ -37,13 +40,13 @@ vet:
 	$(GO) -C cmd/hostcheck vet ./...
 
 metadata:
-	$(GO) run ./cmd/buildmeta
+	@$(GO) run -ldflags "$(VERSION_LDFLAGS)" ./cmd/buildmeta
 
 build:
-	@set -eu; filename="$$($(GO) run ./cmd/buildmeta --field filename)"; \
+	@set -eu; filename="$$($(GO) run -ldflags "$(VERSION_LDFLAGS)" ./cmd/buildmeta --field filename)"; \
 	mkdir -p build; \
-	CGO_ENABLED=1 $(GO) build -buildmode=c-shared -o "build/$$filename" .; \
-	$(GO) run ./cmd/buildmeta > build/plugin-metadata.json
+	CGO_ENABLED=1 $(GO) build -ldflags "$(VERSION_LDFLAGS)" -buildmode=c-shared -o "build/$$filename" .; \
+	$(GO) run -ldflags "$(VERSION_LDFLAGS)" ./cmd/buildmeta > build/plugin-metadata.json
 
 build-hostcheck:
 	@mkdir -p build
@@ -65,5 +68,5 @@ sdkrepro:
 
 # Read-only deployment preflight; override PLUGIN_DIR for the host directory.
 check-plugin-dir:
-	@set -eu; filename="$$($(GO) run ./cmd/buildmeta --field filename)"; \
+	@set -eu; filename="$$($(GO) run -ldflags "$(VERSION_LDFLAGS)" ./cmd/buildmeta --field filename)"; \
 	bash scripts/check-plugin-directory.sh "$(PLUGIN_DIR)" "$$filename"

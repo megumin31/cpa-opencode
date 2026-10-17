@@ -25,7 +25,8 @@ func run(args []string, out, errOut io.Writer) error {
 		Provider string `json:"provider"`
 		Version  string `json:"version"`
 		Filename string `json:"filename"`
-	}{buildinfo.ProviderID, buildinfo.Version, buildinfo.PluginFilename()}
+		BuildTag string `json:"build_tag"`
+	}{buildinfo.ProviderID, buildinfo.Version, buildinfo.PluginFilename(), buildinfo.BuildTag}
 	var value string
 	switch *field {
 	case "":
@@ -34,6 +35,8 @@ func run(args []string, out, errOut io.Writer) error {
 		value = metadata.Provider
 	case "version":
 		value = metadata.Version
+	case "build_tag":
+		value = metadata.BuildTag
 	case "filename":
 		value = metadata.Filename
 	default:

@@ -26,8 +26,11 @@ gcc -dumpfullversion
 "$GO" -C cmd/hostcheck mod download
 "$GO" mod verify
 "$GO" -C cmd/hostcheck mod verify
+export VERSION="$(python3 scripts/release_version.py --ref "${GITHUB_REF:-}" --event "${GITHUB_EVENT_NAME:-}")"
+export BUILD_TAG=dev
+if [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then export BUILD_TAG="${GITHUB_REF#refs/tags/}"; fi
 make check-offline
-"$GO" run ./cmd/buildmeta > build/ci-logs/plugin-metadata.json
+make --no-print-directory metadata > build/ci-logs/plugin-metadata.json
 git diff --exit-code -- go.mod go.sum cmd/hostcheck/go.mod cmd/hostcheck/go.sum
 
 python3 - <<'PY'
@@ -61,6 +64,8 @@ assert required <= exports, f"Missing C ABI exports: {required - exports}"
 build_info = output(os.environ["GO"], "version", "-m", str(library)) + "\n"
 assert f"vcs.revision={os.environ['GITHUB_SHA']}" in build_info, "Wrong embedded commit"
 assert "vcs.modified=false" in build_info, "Build must use an unchanged checkout"
+assert version == os.environ["VERSION"], "Binary metadata disagrees with requested version"
+assert release["build_tag"] == os.environ["BUILD_TAG"], "Wrong full build tag"
 elf_report = output("readelf", "-h", "-d", "--version-info", str(library)) + "\n"
 glibc_versions = sorted(set(re.findall(r"GLIBC_(\d+(?:\.\d+)+)", elf_report)), key=lambda v: tuple(map(int, v.split("."))))
 github_actions = os.environ.get("GITHUB_ACTIONS") == "true"
@@ -71,6 +76,7 @@ metadata = {
     "commit_time": output("git", "show", "-s", "--format=%cI", "HEAD"),
     "plugin": plugin,
     "plugin_version": version,
+    "build_tag": release["build_tag"],
     "library": library.name,
     "library_sha256": hashlib.sha256(binary).hexdigest(),
     "os": "linux",

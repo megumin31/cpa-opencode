@@ -32,11 +32,11 @@
 
 ### 1. 下载预编译动态库
 
-项目发布的 [Releases](https://github.com/megumin31/cpa-opencode-zen/releases) 均在原生验证门禁通过后自动打包：
+推送版本标签即可自动构建并发布 [Releases](https://github.com/megumin31/cpa-opencode-zen/releases) 均在原生验证门禁通过后自动打包：
 - `opencode-<tag>-linux-amd64.tar.gz`（适用于 x86_64）
 - `opencode-<tag>-linux-arm64.tar.gz`（适用于 aarch64）
 
-下载对应架构的压缩包，校验 SHA-256 后解压出 `opencode-v0.1.0.so`（注意：**请勿重命名该 .so 文件**，保持版本号命名不变），详见 [发布说明与重试机制文档](docs/RELEASE.md)。
+下载对应架构的压缩包，校验 SHA-256 后解压出 `opencode-v0.1.0.so`（注意：**请勿重命名该 .so 文件**，保持版本号命名不变），详见 [发布说明与重试机制文档](docs/RELEASE_zh.md)。
 
 此外，每次代码提交均会通过 GitHub Actions 自动构建最新的 Linux 二进制：
 1. 访问项目的 [Actions](https://github.com/megumin31/cpa-opencode-zen/actions) 页面；
