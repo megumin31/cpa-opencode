@@ -10,7 +10,7 @@ A high-performance C-shared plugin for [CLIProxyAPI](https://github.com/router-f
 
 ## Features
 
-- **Built-in Free Models Support**: Seamless access to OpenCode's curated free-tier models (`deepseek-v4.1-flash-free`, `cat-jam-free`, `space-bunny-free`, `big-pickle`, etc.) with zero monetary cost.
+- **Public Free Model Discovery**: Public mode exposes OpenCode models explicitly priced at zero, subject to supported protocols and trusted destinations.
 - **Automated Gatekeeper Adaptation**:
   - Automatically synthesizes compliant OpenCode EID session identifiers (`ses_<12hex><14base62>`).
   - Transparently manages gateway-required fingerprint tools while isolating and preserving downstream client tool calls.
@@ -22,18 +22,9 @@ A high-performance C-shared plugin for [CLIProxyAPI](https://github.com/router-f
 
 ## Available Free Models
 
-The plugin discovers and routes all free-tier models provided by OpenCode. Call them with the `opencode-zen/<model-id>` alias:
+The plugin selects free candidates from OpenCode’s public catalog. Call them with the `opencode-zen/<model-id>` alias:
 
-| Model | Model ID in CPA | Context | Notes |
-| :--- | :--- | :--- | :--- |
-| **DeepSeek V4.1 Flash Free** | `opencode-zen/deepseek-v4.1-flash-free` | 128K | Fast reasoning & code generation |
-| **Cat Jam Free** | `opencode-zen/cat-jam-free` | 128K | High-speed agentic coding |
-| **Space Bunny Free** | `opencode-zen/space-bunny-free` | 1M | Long-context coding model |
-| **Big Pickle** | `opencode-zen/big-pickle` | 200K | Strong reasoning & logic |
-| **LongCat 2.5 Preview Free** | `opencode-zen/longcat-2.5-preview-free` | 1M | Ultra-long context |
-| **MiMo V2.6 Flash Free** | `opencode-zen/mimo-v2.6-flash-free` | 200K | Lightweight flash model |
-| **Nemotron 3.5 Super VL Free** | `opencode-zen/nemotron-3.5-super-vl-free` | 1M | Multimodal vision & language |
-| **Muse Spark 1.3 Contributor Free** | `opencode-zen/muse-spark-1.3-contributor-free` | 1M | Responses API contributor model |
+The upstream catalog changes over time; use CPA’s /v1/models for the actual list. One standalone script request using public on 2026-10-17 returned HTTP 403 FreeTierError with an official-client-only message. That script did not use this plugin’s complete request construction, session headers, or transport; it does not establish whether actual plugin requests succeed. Live plugin end-to-end inference remains unverified. Zero catalog pricing does not guarantee anonymous access: upstream may rate-limit, retire a model, or require account authentication.
 
 ---
 
@@ -93,7 +84,9 @@ Place an auth JSON file in your CPA `auth-dir` (default: `~/.cli-proxy-api/openc
 }
 ```
 
-> **Note**: If you have an OpenCode Console Service Account Key (`oc_sk_...`), you can place it in `"key"`. If you only want to use the free models, `"public"` works out of the box.
+> **Public mode**: Set `"key"` to the exact string `"public"` to skip the authenticated Console config endpoint and discover from the public catalog. Inference still sends public as its authentication value. Input/output prices must both be explicitly zero, with every other listed cost component also zero; missing or unrecognized prices are excluded.
+>
+> Real account keys continue to use Console discovery. A 401/403 clears that credential’s cached routes and fails, without falling back to public. Credential caches remain isolated. These rules apply in both direct and Worker modes.
 
 ### 4. Restart CPA
 

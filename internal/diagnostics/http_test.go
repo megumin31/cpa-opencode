@@ -19,6 +19,7 @@ func TestUpstreamErrorDiagnosticCategories(t *testing.T) {
 	for _, tc := range []struct {
 		name, contentType, body, parse, code, kind, tag string
 	}{
+		{"free_tier", "application/json", `{"error":{"type":"FreeTierError","message":"OpenCode free tier is restricted to its client"}}`, "json_category", "", "free_tier_restricted", ""},
 		{"nested_known", "application/json; charset=utf-8", `{"error":{"code":"insufficient_quota","type":"permission_error","tag":"ForbiddenError","message":"private-message"}}`, "json_category", "insufficient_quota", "permission_error", "forbidden"},
 		{"top_level_known", "APPLICATION/JSON", `{"code":"invalid_api_key","type":"authentication_error","tag":"UnauthorizedError"}`, "json_category", "invalid_api_key", "authentication_error", "unauthorized"},
 		{"problem_json", "application/problem+json", `{"type":"permission_error","detail":"private-detail"}`, "json_category", "", "permission_error", ""},

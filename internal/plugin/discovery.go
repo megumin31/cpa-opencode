@@ -45,47 +45,61 @@ func (e *Engine) discover(g *generation, ctx context.Context, c credential, host
 	if !force && entry.routes != nil && e.now().Before(entry.expires) && !e.catalogRefreshDue(entry) {
 		return entry.routes, nil
 	}
-	headers := http.Header{"Authorization": {"Bearer " + c.Key}, "Accept": {"application/json"}}
-	if c.OrgID != "" {
-		headers.Set("x-org-id", c.OrgID)
-	}
-	resp, err := outbound(g, ctx, c, hostProxy, "GET", c.Server+"/api/v2/config", headers, nil, true)
-	if err != nil {
-		return e.staleDiscovery(entry, err)
-	}
-	defer resp.Body.Close()
-	// Status-only diagnostics distinguish authenticated Console HTTP from public
-	// catalog parsing. Never include credentials, headers, response bodies, URLs,
-	// organization IDs, or model names in this log. A 2xx alone is not entitlement.
-	e.logf("OpenCode discovery: stage=console_config http_status=%d", resp.StatusCode)
-	// Native aR treats 404 as no Console overrides, not no catalog models.
-	if resp.StatusCode != 404 && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
-		err = transport.UpstreamError(resp.StatusCode)
-		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			entry.routes = nil
-			entry.expires = time.Time{}
-			entry.lastError = err
-			return nil, err
-		}
-		return e.staleDiscovery(entry, err)
-	}
 	raw := []byte(`{"providers":{}}`)
-	if resp.StatusCode != 404 {
-		raw, err = transport.ReadBounded(resp.Body, transport.MaxResponseBytes)
+	// Public credentials use only public metadata, never the authenticated Console.
+	if c.Key != "public" {
+		headers := http.Header{"Authorization": {"Bearer " + c.Key}, "Accept": {"application/json"}}
+		if c.OrgID != "" {
+			headers.Set("x-org-id", c.OrgID)
+		}
+		resp, err := outbound(g, ctx, c, hostProxy, "GET", c.Server+"/api/v2/config", headers, nil, true)
 		if err != nil {
 			return e.staleDiscovery(entry, err)
+		}
+		defer resp.Body.Close()
+		// Status-only diagnostics distinguish authenticated Console HTTP from public
+		// catalog parsing. Never include credentials, headers, response bodies, URLs,
+		// organization IDs, or model names in this log. A 2xx alone is not entitlement.
+		e.logf("OpenCode discovery: stage=console_config http_status=%d", resp.StatusCode)
+		// Native aR treats 404 as no Console overrides, not no catalog models.
+		if resp.StatusCode != 404 && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+			err = transport.UpstreamError(resp.StatusCode)
+			if resp.StatusCode == 401 || resp.StatusCode == 403 {
+				entry.routes = nil
+				entry.expires = time.Time{}
+				entry.lastError = err
+				return nil, err
+			}
+			return e.staleDiscovery(entry, err)
+		}
+		if resp.StatusCode != 404 {
+			raw, err = transport.ReadBounded(resp.Body, transport.MaxResponseBytes)
+			if err != nil {
+				return e.staleDiscovery(entry, err)
+			}
 		}
 	}
 	catalogData, cacheCatalog, err := e.discoveryCatalog(g, ctx, entry, hostProxy)
 	if err != nil {
 		return e.staleDiscovery(entry, err)
 	}
-	routes, err := catalog.ResolveRoutes(raw, catalogData)
+	var routes map[string]catalog.Route
+	if c.Key == "public" {
+		routes, err = catalog.ResolvePublicRoutes(catalogData)
+	} else {
+		routes, err = catalog.ResolveRoutes(raw, catalogData)
+	}
 	if err != nil {
+		if c.Key == "public" {
+			return e.staleDiscovery(entry, fail(502, "public model catalog cannot be resolved"))
+		}
 		return e.staleDiscovery(entry, fail(502, "OpenCode Console returned an invalid provider configuration"))
 	}
 	e.logRouteCounts(g.config, routes)
 	if !cacheCatalog && len(modelInfos(g.config, routes)) == 0 {
+		if c.Key == "public" {
+			return e.staleDiscovery(entry, fail(503, "public model catalog is unavailable; configure a trusted catalog_file snapshot"))
+		}
 		return e.staleDiscovery(entry, fail(503, "public model catalog is unavailable and Console supplied no usable routes; configure a trusted catalog_file snapshot"))
 	}
 	entry.routes = routes

@@ -10,7 +10,7 @@
 
 ## 特性
 
-- **内置免费模型支持**：免充值开箱即用 OpenCode 官方精选的免费模型（`deepseek-v4.1-flash-free`、`cat-jam-free`、`space-bunny-free`、`big-pickle` 等）。
+- **公开免费模型发现**：支持 public 模式，仅注册目录明确标为零费用且协议、目标地址受支持的 OpenCode 模型。
 - **自动化网关适配**：
   - 自动合成符合 OpenCode 规范的 EID 会话标识符（`ses_<12位hex><14位base62>`）。
   - 透明注入并隔离网关必须的指纹验证工具，对下游客户端自定义工具调用（Tool Calls）零干扰并完整透传。
@@ -22,18 +22,9 @@
 
 ## 可用免费模型
 
-本插件自动发现并路由 OpenCode 提供的所有免费模型，在 CPA 中通过 `opencode-zen/<model-id>` 别名进行调用：
+本插件筛选公开目录中的免费候选模型，在 CPA 中通过 `opencode-zen/<model-id>` 别名进行调用：
 
-| 模型名称 | CPA 模型 ID | 上下文窗口 | 说明 |
-| :--- | :--- | :--- | :--- |
-| **DeepSeek V4.1 Flash Free** | `opencode-zen/deepseek-v4.1-flash-free` | 128K | 极速推理与代码生成 |
-| **Cat Jam Free** | `opencode-zen/cat-jam-free` | 128K | 高吞吐 Agentic 代码模型 |
-| **Space Bunny Free** | `opencode-zen/space-bunny-free` | 1M | 超长上下文代码模型 |
-| **Big Pickle** | `opencode-zen/big-pickle` | 200K | 强逻辑与综合推理 |
-| **LongCat 2.5 Preview Free** | `opencode-zen/longcat-2.5-preview-free` | 1M | 超长上下文通用模型 |
-| **MiMo V2.6 Flash Free** | `opencode-zen/mimo-v2.6-flash-free` | 200K | 轻量级 Flash 快速响应模型 |
-| **Nemotron 3.5 Super VL Free** | `opencode-zen/nemotron-3.5-super-vl-free` | 1M | 多模态视觉与语言理解 |
-| **Muse Spark 1.3 Contributor Free** | `opencode-zen/muse-spark-1.3-contributor-free` | 1M | Responses API 贡献者模型 |
+模型目录随上游变化；请以 CPA 的 /v1/models 实际列表为准。2026-10-17 的一次独立脚本 public 请求返回 HTTP 403 FreeTierError，并提示仅允许官方客户端。该脚本未使用本插件完整的请求构造、会话头及传输链路，不能据此判断实际插件请求是否成功；插件线上端到端推理仍未验证。目录标为零费用并不保证匿名调用获准；上游仍可限流、停用模型或要求账户认证。
 
 ---
 
@@ -88,7 +79,8 @@ plugins:
 ```
 
 > **说明**：
-> - 若仅使用免费模型，`"key"` 填写 `"public"` 即可开箱即用；
+> - 若仅使用公开免费模型，`"key"` 填写精确字符串 `"public"`。此模式跳过需要账户认证的 Console 配置接口，仅读取公开目录；推理请求仍发送 public 认证值。输入与输出价格必须显式为 0，其他列出的费用也必须为 0；缺失或无法确认的价格不会被当成免费。
+> - 真实账户 key 仍使用 Console 发现；401/403 会清除该认证的缓存路由并返回失败，不会退回 public。两类认证缓存彼此隔离。直连和配置 Worker 的请求遵守相同规则。
 > - 若拥有 OpenCode Console Service Key（`oc_sk_...`），将其填入 `"key"` 字段即可无缝解锁工作区付费与自定义模型。
 
 ### 4. 重启并验证 CPA

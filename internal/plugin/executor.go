@@ -215,6 +215,18 @@ func (e *Engine) prepareRequest(cfg pluginConfig, ctx context.Context, c credent
 	if err != nil {
 		return nil, "", nil, err
 	}
+	// Recheck the final wire body after all configured overlays. Public
+	// discovery verified the route's ModelID; no caller/variant may redirect it.
+	if c.Key == "public" {
+		var final map[string]any
+		if json.Unmarshal(payload, &final) != nil {
+			return nil, "", nil, fail(400, "invalid public inference body")
+		}
+		model, present := final["model"]
+		if (r.Protocol != "gemini" && model != r.ModelID) || (r.Protocol == "gemini" && present && model != r.ModelID) {
+			return nil, "", nil, fail(400, "public inference cannot override the discovered free model")
+		}
+	}
 	if err := transport.AllowedURL(cfg.transportPolicy(), target); err != nil {
 		return nil, "", nil, err
 	}

@@ -229,6 +229,8 @@ func allowlistedErrorCategory(value string) string {
 	switch value {
 	case "unauthorized", "UNAUTHENTICATED", "UnauthorizedError":
 		return "unauthorized"
+	case "FreeTierError":
+		return "free_tier_restricted"
 	case "forbidden", "ForbiddenError":
 		return "forbidden"
 	case "permission_denied", "PERMISSION_DENIED", "PermissionDeniedError":
